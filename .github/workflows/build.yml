@@ -39,8 +39,9 @@ jobs:
     - name: Upload installer to GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        name: HelloPyQtInstaller.exe
-        tag_name: nightly-build-${{ github.run_number }}
+        tag_name: auto-release
         files: output/HelloPyQtInstaller.exe
+        prerelease: true
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GH_PAT }} 
+    
