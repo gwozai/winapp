@@ -47,32 +47,14 @@ jobs:
         (Get-Content installer.iss) -replace 'MyApp', "MyApp-${{ env.VERSION }}" | Set-Content installer.iss
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss  # 使用 Inno Setup 生成安装包1
 
-    - name: 上传安装包到 GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        # 使用生成的版本号作为 GitHub Release 的标签
-        tag_name: v${{ env.VERSION }}
-        # 上传生成的安装包，文件名带版本号，尝试多个目录
-        files: |
-          dist/MyApp-${{ env.VERSION }}.exe
-          output/MyApp-${{ env.VERSION }}.exe
-          build/MyApp-${{ env.VERSION }}.exe
-        prerelease: true  # 标记为预发布版本
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_PAT }}  # 使用 GitHub Personal Access Token 进行认证
-
 
     - name: 上传安装包到 GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         # 使用生成的版本号作为 GitHub Release 的标签
         tag_name: v${{ env.VERSION }}
-        # 上传生成的安装包，文件名带版本号，尝试多个目录
-        files: |
-          dist/MyApp-${{ env.VERSION }}.exe
-          output/MyApp-${{ env.VERSION }}.exe
-          build/MyApp-${{ env.VERSION }}.exe
+        # 上传生成的安装包，文件名带版本号，确保路径正确
+        files: dist/MyApp-${{ env.VERSION }}.exe
         prerelease: true  # 标记为预发布版本
       env:
         GITHUB_TOKEN: ${{ secrets.GH_PAT }}  # 使用 GitHub Personal Access Token 进行认证
-  
