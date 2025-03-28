@@ -1,109 +1,188 @@
 import sys
-import threading
-import uuid
 import redis
-from PyQt5.QtCore import pyqtSignal, QObject, Qt
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QTextEdit, QListWidget,
-    QLineEdit, QPushButton, QLabel, QHBoxLayout
-)
+import random
+import requests
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QDialog, QLabel, QLineEdit
+from PyQt5.QtGui import QPixmap, QImage
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 
-# 用于线程间通信的对象
-class SignalBus(QObject):
-    new_message = pyqtSignal(str)
-    update_users = pyqtSignal()
 
-class ChatClient(QWidget):
+# 自定义弹窗类
+class CustomPopup(QDialog):
+    def __init__(self, message):
+        super().__init__()
+
+        self.setWindowTitle('通知')  # 弹窗标题
+        self.setFixedSize(250, 100)  # 设置弹窗大小
+
+        # 设置弹窗样式
+        self.setStyleSheet("""
+            background-color: #333;
+            color: white;
+            border-radius: 10px;
+            font-size: 14px;
+            padding: 10px;
+        """)
+
+        # 显示的内容
+        self.label = QLabel(message, self)
+        self.label.setAlignment(Qt.AlignCenter)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.label)
+        self.setLayout(layout)
+
+        # 设置窗口置顶
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+
+        # 设置透明度
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        # 计算右下角的位置并设置窗口位置
+        screen = QApplication.primaryScreen().geometry()
+        self.move(screen.width() - self.width() - 10, screen.height() - self.height() - 10)
+
+        # 设置定时器，3秒后自动关闭弹窗
+        QTimer.singleShot(3000, self.close)
+
+    def show_popup(self):
+        # 延迟显示弹窗，避免阻塞主线程
+        QTimer.singleShot(0, self.show)
+
+
+# Redis消息接收线程
+class RedisReceiverThread(QThread):
+    message_received = pyqtSignal(str)
+
+    def __init__(self, redis_host, redis_port, redis_password, channel, thread_pool):
+        super().__init__()
+        self.redis_host = redis_host
+        self.redis_port = redis_port
+        self.redis_password = redis_password
+        self.channel = channel
+        self.thread_pool = thread_pool
+        self.client = redis.StrictRedis(host=self.redis_host, port=self.redis_port, password=self.redis_password)
+        self.pubsub = self.client.pubsub()
+        self.pubsub.subscribe(self.channel)
+
+    def run(self):
+        # 使用线程池来管理 Redis 消息的接收
+        for message in self.pubsub.listen():
+            if message['type'] == 'message':
+                self.thread_pool.submit(self.message_received.emit, message['data'].decode('utf-8'))
+
+
+class MyApp(QWidget):
     def __init__(self):
         super().__init__()
 
-        # Redis 连接池配置
-        self.redis = redis.Redis(
-            host='106.12.107.176',
-            port=6379,
-            password='584257191',
-            decode_responses=True,
-            max_connections=10
+        self.setWindowTitle('图片随机播放')
+        self.setFixedSize(800, 600)
+
+        # 创建布局
+        self.layout = QVBoxLayout()
+
+        # 输入框用于添加多个图片URL
+        self.url_input = QLineEdit(self)
+        self.url_input.setPlaceholderText("输入图片 URL（多个 URL 用逗号分隔）")
+
+        # 按钮，点击后添加URL并显示图片
+        self.add_button = QPushButton('添加 URL', self)
+        self.add_button.clicked.connect(self.add_url)
+
+        # 图片显示标签
+        self.image_label = QLabel(self)
+        self.image_label.setAlignment(Qt.AlignCenter)
+
+        # 布局
+        self.layout.addWidget(self.url_input)
+        self.layout.addWidget(self.add_button)
+        self.layout.addWidget(self.image_label)
+
+        self.setLayout(self.layout)
+
+        # 用于存储图片URL的列表
+        self.image_urls = []
+
+        # 创建线程池，最大线程数为 5
+        self.thread_pool = ThreadPoolExecutor(max_workers=5)  # Initialize ThreadPoolExecutor
+
+        # 初始化Redis接收线程
+        self.redis_thread = RedisReceiverThread(
+            redis_host='106.12.107.176',
+            redis_port=6379,
+            redis_password='584257191',
+            channel='notifications_channel',  # 频道名称
+            thread_pool=self.thread_pool
         )
+        self.redis_thread.message_received.connect(self.show_notification)
+        self.redis_thread.start()
 
-        # 匿名用户名生成
-        self.username = f"User_{uuid.uuid4().hex[:6]}"
-        self.channel = "chatroom"
+        # 定时器，随机显示图片
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.show_random_image)
+        self.timer.start(5000)  # 每 5 秒钟随机选择并显示图片
 
-        # 信号
-        self.signal_bus = SignalBus()
-        self.signal_bus.new_message.connect(self.display_message)
-        self.signal_bus.update_users.connect(self.update_user_list)
+    def add_url(self):
+        # 获取输入框中的图片URL并添加到列表
+        urls = self.url_input.text().split(',')
+        self.image_urls.extend([url.strip() for url in urls if url.strip()])
+        self.url_input.clear()
 
-        self.init_ui()
-        self.register_user()
-        self.start_message_listener()
+        # 打印当前URL列表
+        print("当前图片URL列表：", self.image_urls)
 
-    def init_ui(self):
-        self.setWindowTitle(f"聊天室 - {self.username}")
-        self.setGeometry(200, 200, 500, 400)
+    def show_random_image(self):
+        # 如果URL列表非空，则随机选择一个URL并显示图片
+        if self.image_urls:
+            random_url = random.choice(self.image_urls)
+            pixmap = self.load_image_from_url(random_url)
+            if pixmap:
+                self.image_label.setPixmap(pixmap.scaled(800, 600, Qt.KeepAspectRatio))
 
-        layout = QVBoxLayout()
+    def load_image_from_url(self, url):
+        try:
+            # 下载图片
+            response = requests.get(url)
+            if response.status_code == 200:
+                image_data = response.content
+                image = QImage()
+                image.loadFromData(image_data)
+                pixmap = QPixmap(image)
+                return pixmap
+            else:
+                print(f"无法下载图片: {url}")
+                return None
+        except Exception as e:
+            print(f"加载图片失败: {url}, 错误: {e}")
+            return None
 
-        self.chat_display = QTextEdit()
-        self.chat_display.setReadOnly(True)
-        layout.addWidget(QLabel("聊天室"))
-        layout.addWidget(self.chat_display)
+    def show_popup(self):
+        # 获取输入框内容
+        input_text = self.input_line.text()
 
-        self.user_list = QListWidget()
-        layout.addWidget(QLabel("在线用户"))
-        layout.addWidget(self.user_list)
+        # 如果输入框为空，则显示默认消息
+        if not input_text:
+            input_text = '请输入一些消息'
 
-        bottom_layout = QHBoxLayout()
-        self.message_input = QLineEdit()
-        self.send_button = QPushButton("发送")
-        self.send_button.clicked.connect(self.send_message)
-        bottom_layout.addWidget(self.message_input)
-        bottom_layout.addWidget(self.send_button)
-        layout.addLayout(bottom_layout)
+        # 创建弹窗并显示
+        self.popup = CustomPopup(input_text)
+        self.popup.show_popup()
 
-        self.setLayout(layout)
-        self.update_user_list()
-
-    def register_user(self):
-        self.redis.sadd("online_users", self.username)
-        self.redis.publish(self.channel, f"📢 {self.username} 加入了聊天室")
-
-    def closeEvent(self, event):
-        self.redis.srem("online_users", self.username)
-        self.redis.publish(self.channel, f"📢 {self.username} 离开了聊天室")
-        event.accept()
-
-    def update_user_list(self):
-        self.user_list.clear()
-        users = self.redis.smembers("online_users")
-        for user in sorted(users):
-            self.user_list.addItem(user)
-
-    def display_message(self, msg):
-        self.chat_display.append(msg)
-
-    def send_message(self):
-        msg = self.message_input.text().strip()
-        if msg:
-            self.redis.publish(self.channel, f"{self.username}: {msg}")
-            self.message_input.clear()
-
-    def start_message_listener(self):
-        def listener():
-            pubsub = self.redis.pubsub()
-            pubsub.subscribe(self.channel)
-            for message in pubsub.listen():
-                if message['type'] == 'message':
-                    text = message['data']
-                    self.signal_bus.new_message.emit(text)
-                    self.signal_bus.update_users.emit()
-
-        threading.Thread(target=listener, daemon=True).start()
+    def show_notification(self, message):
+        # 当接收到Redis消息时创建通知弹窗
+        self.popup = CustomPopup(message)
+        self.popup.show_popup()
 
 
-if __name__ == "__main__":
+def main():
     app = QApplication(sys.argv)
-    client = ChatClient()
-    client.show()
+    window = MyApp()
+    window.show()
     sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()

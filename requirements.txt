@@ -2,3 +2,4 @@ pyqt5==5.15.9
 pillow
 pyinstaller
 redis
+requests
