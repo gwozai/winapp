@@ -45,7 +45,7 @@ jobs:
       run: |
         # 更新 Inno Setup 脚本中的应用名为带版本号的形式
         (Get-Content installer.iss) -replace 'MyApp', "MyApp-${{ env.VERSION }}" | Set-Content installer.iss
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss  # 使用 Inno Setup 生成安装包
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss  # 使用 Inno Setup 生成安装包1
 
     - name: 上传安装包到 GitHub Release
       uses: softprops/action-gh-release@v1
