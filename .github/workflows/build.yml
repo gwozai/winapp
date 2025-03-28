@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main  # 只在 main 分支推送时触发
-    tags:
-      - 'v*.*.*'  # 匹配版本标签，比如 v1.0.0
 
 jobs:
   build:
@@ -30,28 +28,29 @@ jobs:
         Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"  # 下载 Inno Setup
         Start-Process .\is.exe /VERYSILENT -Wait  # 安静安装 Inno Setup
 
-    - name: 获取版本号
+    - name: 获取当前时间生成版本号
       id: version
       run: |
-        # 从 Git 标签中提取版本号（例如 v1.0.0 -> 1.0.0）
-        VERSION=$(echo ${GITHUB_REF} | sed 's/refs\/tags\/v\(.*\)/\1/')
-        echo "VERSION=${VERSION}" >> $GITHUB_ENV  # 将版本号存入环境变量
+        # 使用当前时间戳生成版本号，格式：vYYYYMMDD-HHMMSS
+        $version = (Get-Date).ToString('yyyyMMdd-HHmmss')
+        Write-Host "VERSION=$version"  # 输出版本号，用于后续步骤
+        echo "VERSION=$version" >> $env:GITHUB_ENV  # 将版本号存入环境变量
 
     - name: 使用 PyInstaller 构建应用
       run: |
-        # 使用版本号来命名构建的应用
+        # 使用生成的版本号来命名构建的应用
         python -m PyInstaller --name MyApp-${{ env.VERSION }} --onefile --noconsole --icon=resources\app.ico main.py
 
     - name: 使用 Inno Setup 构建安装包
       run: |
         # 更新 Inno Setup 脚本中的应用名为带版本号的形式
-        sed -i "s/MyApp/MyApp-${{ env.VERSION }}/" installer.iss
+        (Get-Content installer.iss) -replace 'MyApp', "MyApp-${{ env.VERSION }}" | Set-Content installer.iss
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss  # 使用 Inno Setup 生成安装包
 
     - name: 上传安装包到 GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        # 使用版本号作为 GitHub Release 的标签
+        # 使用生成的版本号作为 GitHub Release 的标签
         tag_name: v${{ env.VERSION }}
         # 上传生成的安装包，文件名带版本号
         files: output/MyApp-${{ env.VERSION }}.exe
