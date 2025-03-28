@@ -32,9 +32,10 @@ jobs:
       run: |
         python -m PyInstaller --name MyApp --onefile --noconsole --icon=resources\app.ico main.py
 
+
     - name: Build installer with Inno Setup
       run: |
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
     - name: Upload installer artifact
       uses: actions/upload-artifact@v4
