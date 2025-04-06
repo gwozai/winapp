@@ -1,3 +1,57 @@
+# 用户指定的忽略项
 .qodo
 .idea
 1.py
+
+# Python 忽略项
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyCharm 忽略项
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+out/
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.env
+.venv
+
+# 日志文件
+*.log
+
+# 本地配置文件
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 缓存文件
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/

@@ -3,3 +3,4 @@ pillow
 pyinstaller
 redis
 requests
+minio
