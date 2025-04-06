@@ -96,10 +96,15 @@ class MyApp(QWidget):
         self.image_label = QLabel(self)
         self.image_label.setAlignment(Qt.AlignCenter)
 
+        # 在线人数显示标签
+        self.online_label = QLabel(self)
+        self.online_label.setAlignment(Qt.AlignCenter)
+
         # 布局
         self.layout.addWidget(self.url_input)
         self.layout.addWidget(self.add_button)
         self.layout.addWidget(self.image_label)
+        self.layout.addWidget(self.online_label)
 
         self.setLayout(self.layout)
 
@@ -124,6 +129,11 @@ class MyApp(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.show_random_image)
         self.timer.start(5000)  # 每 5 秒钟随机选择并显示图片
+
+        # 定时器，更新在线人数
+        self.online_timer = QTimer(self)
+        self.online_timer.timeout.connect(self.update_online_count)
+        self.online_timer.start(10000)  # 每 10 秒钟更新一次在线人数
 
     def add_url(self):
         # 获取输入框中的图片URL并添加到列表
@@ -158,6 +168,18 @@ class MyApp(QWidget):
         except Exception as e:
             print(f"加载图片失败: {url}, 错误: {e}")
             return None
+
+    def update_online_count(self):
+        # 从Redis获取在线人数
+        try:
+            online_count = self.client.get('online_users_count')  # 这个key是用来存储在线人数的
+            if online_count:
+                self.online_label.setText(f"当前在线人数: {online_count.decode('utf-8')}")
+            else:
+                self.online_label.setText("当前在线人数: 0")
+        except Exception as e:
+            print(f"获取在线人数失败: {e}")
+            self.online_label.setText("当前在线人数: 无法获取")
 
     def show_popup(self):
         # 获取输入框内容
