@@ -7,55 +7,82 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest  # 使用最新的 Windows 环境
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]  # 同时支持 Windows 和 macOS
+        include:
+          - os: windows-latest
+            output_name: MyApp-Windows
+            artifact_ext: .exe
+          - os: macos-latest
+            output_name: MyApp-macOS
+            artifact_ext: .app
+    
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3  # 获取代码
+      uses: actions/checkout@v3
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'  # 设置 Python 版本为 3.10
+        python-version: '3.10'
 
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip  # 更新 pip
-        pip install -r requirements.txt  # 安装依赖
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-    - name: Install Inno Setup
+    - name: Install Inno Setup (Windows only)
+      if: matrix.os == 'windows-latest'
       run: |
-        Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"  # 下载 Inno Setup
-        Start-Process .\is.exe /VERYSILENT -Wait  # 安静安装 Inno Setup
+        Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
+        Start-Process .\is.exe /VERYSILENT -Wait
 
     - name: 获取当前时间生成版本号
       id: version
+      shell: bash  # 使用bash以确保跨平台兼容
       run: |
-        # 使用当前时间戳生成版本号，格式：vYYYYMMDD-HHMMSS
-        $version = (Get-Date).ToString('yyyyMMdd-HHmmss')
-        Write-Host "VERSION=$version"  # 输出版本号，用于后续步骤
-        echo "VERSION=$version" >> $env:GITHUB_ENV  # 将版本号存入环境变量
+        VERSION=$(date +'%Y%m%d-%H%M%S')
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-    - name: 使用 PyInstaller 构建应用
+    - name: 使用 PyInstaller 构建应用 (Windows)
+      if: matrix.os == 'windows-latest'
       run: |
-        # 使用生成的版本号来命名构建的应用
-        python -m PyInstaller --name MyApp-${{ env.VERSION }} --onefile --noconsole --icon=resources\app.ico main.py
+        python -m PyInstaller --name ${{ matrix.output_name }}-${{ env.VERSION }} --onefile --noconsole --icon=resources\app.ico main.py
 
-    - name: 使用 Inno Setup 构建安装包
+    - name: 使用 PyInstaller 构建应用 (macOS)
+      if: matrix.os == 'macos-latest'
       run: |
-        # 更新 Inno Setup 脚本中的应用名为带版本号的形式
-        (Get-Content installer.iss) -replace 'MyApp', "MyApp-${{ env.VERSION }}" | Set-Content installer.iss
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss  # 使用 Inno Setup 生成安装包
+        # 为macOS创建.app包
+        python -m PyInstaller --name ${{ matrix.output_name }}-${{ env.VERSION }} --windowed --icon=resources/app.ico main.py
+        # 创建DMG文件
+        brew install create-dmg
+        create-dmg \
+          --volname "${{ matrix.output_name }}-${{ env.VERSION }}" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "${{ matrix.output_name }}-${{ env.VERSION }}.app" 200 190 \
+          --hide-extension "${{ matrix.output_name }}-${{ env.VERSION }}.app" \
+          --app-drop-link 600 185 \
+          "dist/${{ matrix.output_name }}-${{ env.VERSION }}.dmg" \
+          "dist/${{ matrix.output_name }}-${{ env.VERSION }}.app"
 
-    - name: 上传安装包到 GitHub Release
+    - name: 使用 Inno Setup 构建安装包 (Windows only)
+      if: matrix.os == 'windows-latest'
+      run: |
+        (Get-Content installer.iss) -replace 'MyApp', "${{ matrix.output_name }}-${{ env.VERSION }}" | Set-Content installer.iss
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+    - name: 上传构建产物到 GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        # 使用生成的版本号作为 GitHub Release 的标签
         tag_name: v${{ env.VERSION }}
-        # 上传生成的安装包和 HelloPyQtInstaller.exe，确保路径正确
         files: |
-          dist/MyApp-${{ env.VERSION }}.exe
-          output/HelloPyQtInstaller.exe
-        prerelease: true  # 标记为预发布版本
+          ${{ matrix.os == 'windows-latest' && format('dist/{0}-{1}.exe', matrix.output_name, env.VERSION) || format('dist/{0}-{1}.dmg', matrix.output_name, env.VERSION) }}
+          ${{ matrix.os == 'windows-latest' && 'output/HelloPyQtInstaller.exe' || '' }}
+        prerelease: true
       env:
-        GITHUB_TOKEN: ${{ secrets.GH_PAT }}  # 使用 GitHub Personal Access Token 进行认证
+        GITHUB_TOKEN: ${{ secrets.GH_PAT }}

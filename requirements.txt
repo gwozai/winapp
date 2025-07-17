@@ -1,6 +1,9 @@
-pyqt5==5.15.9
+PyQt5>=5.15.0
 pillow
-pyinstaller
+pyinstaller>=5.13.0
 redis
 requests
-minio
+minio>=7.1.0
+humanize>=4.0.0
+pyperclip>=1.8.0
+matplotlib>=3.7.0

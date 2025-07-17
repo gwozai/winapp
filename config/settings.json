@@ -1,0 +1,23 @@
+{
+    "minio": {
+        "endpoint": "106.12.107.176:19000",
+        "access_key": "minio",
+        "secret_key": "ei2BEHZYLaR8eGtT",
+        "bucket": "album",
+        "secure": false
+    },
+    "ui": {
+        "theme": "light",
+        "language": "zh_CN",
+        "window_size": {
+            "width": 1200,
+            "height": 800
+        }
+    },
+    "commands": {
+        "default_type": "download",
+        "show_progress": true,
+        "use_powershell": false,
+        "auto_delete": false
+    }
+}
